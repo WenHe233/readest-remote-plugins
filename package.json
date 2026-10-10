@@ -1,0 +1,26 @@
+{
+  "name": "readest-remote-plugins",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0",
+  "packageManager": "pnpm@11.1.1",
+  "scripts": {
+    "sdk:prepare": "node scripts/prepare-sdk.mjs",
+    "test": "vitest run",
+    "check": "tsc --noEmit",
+    "build": "node scripts/build-plugins.mjs",
+    "sign": "node scripts/sign-plugins.mjs",
+    "source": "node scripts/serve-plugin-repository.mjs dist --port 4781"
+  },
+  "dependencies": {
+    "@readest/plugin-sdk": "file:.sdk/readest-plugin-sdk.tgz"
+  },
+  "devDependencies": {
+    "@zip.js/zip.js": "2.8.26",
+    "esbuild": "0.28.1",
+    "vitest": "4.1.11",
+    "typescript": "7.0.2",
+    "@types/node": "24.10.0"
+  }
+}

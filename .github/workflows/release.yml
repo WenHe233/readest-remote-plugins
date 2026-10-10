@@ -1,0 +1,78 @@
+name: Publish signed plugins and repository
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: plugin-source-publication
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.20.0'
+      - run: |
+          npm run sdk:prepare
+          pnpm install --frozen-lockfile
+          pnpm check
+          pnpm test
+      - name: Validate release tag
+        if: github.ref_type == 'tag'
+        run: node -e "if(process.env.GITHUB_REF_NAME!=='v'+require('./package.json').version)throw new Error('Version mismatch')"
+      - name: Sign and verify packages
+        env:
+          READEST_PLUGIN_SIGNING_KEY_PEM: ${{ secrets.READEST_PLUGIN_SIGNING_KEY_PEM }}
+          READEST_PLUGIN_SIGNER_SHA256: ${{ vars.READEST_PLUGIN_SIGNER_SHA256 }}
+        run: |
+          channel=$(node -p "const v=require('./package.json').version; v.includes('nightly')?'nightly':v.includes('-')?'beta':'stable'")
+          node scripts/sign-plugins.mjs --channel "$channel"
+          node scripts/verify-repository.mjs
+          node scripts/package-release.mjs
+      - name: Publish immutable version
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "Readest Remote plugins ${GITHUB_REF_NAME}" --generate-notes
+  pages:
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+    needs: release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.20.0'
+      - run: |
+          npm run sdk:prepare
+          pnpm install --frozen-lockfile
+      - name: Build complete public source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READEST_PLUGIN_SIGNER_SHA256: ${{ vars.READEST_PLUGIN_SIGNER_SHA256 }}
+        run: node scripts/build-pages.mjs
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
+        with:
+          path: .pages
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

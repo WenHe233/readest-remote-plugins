@@ -23,7 +23,7 @@ async function zip(path, entries) {
 await zip(`release/readest-plugin-source-${version}.zip`,collect('dist'));
 copyFileSync('.sdk/readest-plugin-sdk.tgz',`release/readest-plugin-sdk-${sdkVersion}.tgz`);
 const examples=[...collect('plugins','plugins/'),...collect('packages','packages/'),...collect('scripts','scripts/'),['.sdk/readest-plugin-sdk.tgz',readFileSync('.sdk/readest-plugin-sdk.tgz')]];
-for(const name of ['package.json','pnpm-lock.yaml','pnpm-workspace.yaml','SDK_SOURCE.json','tsconfig.json','README.md','LICENSE']) examples.push([name,readFileSync(name)]);
+for(const name of ['package.json','pnpm-lock.yaml','pnpm-workspace.yaml','SDK_SOURCE.json','tsconfig.json','vitest.config.mts','README.md','LICENSE']) examples.push([name,readFileSync(name)]);
 examples.push(['COMPATIBILITY.md',readFileSync('COMPATIBILITY.md')]);
 // Download pinned upstream scripts for testing instead of redistributing sources
 // whose repository does not provide a license. Their hashes remain in the lock.

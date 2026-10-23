@@ -1,0 +1,43 @@
+{
+  "id": "io.github.wenhe233.legado",
+  "name": "Legado compatibility",
+  "description": "Import and read Legado sources through the content plugin API",
+  "protocolVersion": 2,
+  "pluginVersion": "0.2.0-x1",
+  "pluginApi": {
+    "min": 3,
+    "max": 3
+  },
+  "entry": "worker.js",
+  "permissions": {
+    "network": true,
+    "storage": true,
+    "secrets": true,
+    "wasm": true,
+    "cookies": true,
+    "interaction": true
+  },
+  "contributions": {
+    "contentSources": [
+      {
+        "id": "legado",
+        "name": "Legado",
+        "kinds": ["text"],
+        "capabilities": {
+          "search": true,
+          "explore": true,
+          "authenticate": true
+        },
+        "settings": []
+      }
+    ],
+    "sourceFormats": [
+      {
+        "id": "legado",
+        "providerId": "legado",
+        "name": "Legado source",
+        "extensions": ["json", "txt"]
+      }
+    ]
+  }
+}

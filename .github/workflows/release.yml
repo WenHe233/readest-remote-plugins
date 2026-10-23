@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    if: ${{ !contains(github.ref_name, '-x') && github.ref_name != 'exp/network-sources' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -24,6 +25,7 @@ jobs:
       - run: |
           npm run sdk:prepare
           pnpm install --frozen-lockfile
+          pnpm fixtures:prepare
           pnpm check
           pnpm test
       - name: Validate release tag

@@ -1,0 +1,21 @@
+{
+  "name": "@readest/plugin-legado",
+  "version": "0.2.0-x1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@readest/plugin-sdk": "0.2.0-x1"
+  },
+  "readestBuildResources": [
+    {
+      "package": "@jitl/quickjs-wasmfile-release-asyncify",
+      "path": "dist/emscripten-module.wasm",
+      "target": "resources/quickjs.wasm"
+    },
+    {
+      "package": "@jitl/quickjs-wasmfile-release-asyncify",
+      "path": "LICENSE",
+      "target": "resources/quickjs.LICENSE"
+    }
+  ]
+}

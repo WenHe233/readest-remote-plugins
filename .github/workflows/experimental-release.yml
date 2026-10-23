@@ -1,0 +1,88 @@
+name: Experimental compatibility prerelease
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Experimental branch or immutable commit to build
+        required: true
+        default: exp/network-sources
+        type: string
+      publish:
+        description: Publish the verified prerelease
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: experimental-plugin-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Freeze target and validate version
+        id: source
+        run: |
+          echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          node -e "if(!/^\d+\.\d+\.\d+-x[1-9]\d*$/.test(require('./package.json').version))throw new Error('Expected xN version')"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.20.0'
+      - name: Validate locked SDK and compatibility engines
+        run: |
+          npm run sdk:prepare
+          pnpm install --frozen-lockfile
+          pnpm fixtures:prepare
+          pnpm check
+          pnpm test
+      - name: Run live source acceptance
+        env:
+          READEST_COMPATIBILITY_LIVE: '1'
+        run: |
+          pnpm test -- tests/compatibility-live.test.ts -t 'manga_dex|komiic|comick|酷我小说|阅友小说|书海阁'
+          node scripts/write-compatibility-report.mjs
+      - name: Sign experimental providers
+        env:
+          READEST_PLUGIN_SIGNING_KEY_PEM: ${{ secrets.READEST_PLUGIN_SIGNING_KEY_PEM }}
+          READEST_PLUGIN_SIGNER_SHA256: ${{ vars.READEST_PLUGIN_SIGNER_SHA256 }}
+        run: |
+          node scripts/sign-plugins.mjs --experimental --channel beta
+          node scripts/verify-repository.mjs
+          node scripts/package-release.mjs
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: experimental-plugins-${{ env.SOURCE_SHA }}
+          path: release/
+          if-no-files-found: error
+  publish:
+    if: inputs.publish
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.build.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.20.0'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: experimental-plugins-${{ needs.build.outputs.source_sha }}
+          path: release/
+      - name: Publish immutable prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: node scripts/publish-experimental.mjs

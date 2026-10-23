@@ -1,10 +1,11 @@
-import { readFileSync, readdirSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdirSync, copyFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { ZipWriter, Uint8ArrayWriter, Uint8ArrayReader } from '@zip.js/zip.js';
 import { verifyRepository } from './verify-repository.mjs';
 
 const { version } = JSON.parse(readFileSync('package.json'));
+const {version:sdkVersion}=JSON.parse(readFileSync('SDK_SOURCE.json'));
 await verifyRepository('dist', process.env.READEST_PLUGIN_SIGNER_SHA256);
 mkdirSync('release', { recursive: true });
 function collect(directory, prefix = '') {
@@ -20,13 +21,17 @@ async function zip(path, entries) {
   writeFileSync(path,await writer.close());
 }
 await zip(`release/readest-plugin-source-${version}.zip`,collect('dist'));
-copyFileSync('.sdk/readest-plugin-sdk.tgz','release/readest-plugin-sdk-0.1.0.tgz');
-const examples=[...collect('plugins','plugins/'),...collect('scripts','scripts/'),['.sdk/readest-plugin-sdk.tgz',readFileSync('.sdk/readest-plugin-sdk.tgz')]];
+copyFileSync('.sdk/readest-plugin-sdk.tgz',`release/readest-plugin-sdk-${sdkVersion}.tgz`);
+const examples=[...collect('plugins','plugins/'),...collect('packages','packages/'),...collect('scripts','scripts/'),['.sdk/readest-plugin-sdk.tgz',readFileSync('.sdk/readest-plugin-sdk.tgz')]];
 for(const name of ['package.json','pnpm-lock.yaml','pnpm-workspace.yaml','SDK_SOURCE.json','tsconfig.json','README.md','LICENSE']) examples.push([name,readFileSync(name)]);
-examples.push(...collect('tests','tests/'));
+examples.push(['COMPATIBILITY.md',readFileSync('COMPATIBILITY.md')]);
+// Download pinned upstream scripts for testing instead of redistributing sources
+// whose repository does not provide a license. Their hashes remain in the lock.
+examples.push(...collect('tests','tests/').filter(([name])=>!name.startsWith('tests/fixtures/venera/')&&name!=='tests/fixtures/legado/shuhaige.json'));
 await zip(`release/readest-plugin-examples-${version}.zip`,examples);
 for(const name of readdirSync('dist/plugins')) copyFileSync(join('dist/plugins',name),join('release',name));
 copyFileSync('dist/index.json','release/index.json');
 copyFileSync('dist/repo.json','release/repo.json');
+if(existsSync('.artifacts/compatibility-report.json'))copyFileSync('.artifacts/compatibility-report.json','release/compatibility-report.json');
 const sums=readdirSync('release').filter(name=>name!=='SHA256SUMS.txt').sort().map(name=>`${createHash('sha256').update(readFileSync(join('release',name))).digest('hex')}  ${name}`);
 writeFileSync('release/SHA256SUMS.txt',sums.join('\n')+'\n');

@@ -9,8 +9,14 @@ export async function verifyRepository(directory, expectedSigner) {
   const index = JSON.parse(readFileSync(join(directory, 'index.json'), 'utf8'));
   if (index.schemaVersion !== 1 || !index.plugins.length) throw new Error('Empty or invalid repository');
   for (const item of index.plugins) {
-    if (!/^plugins\/[a-z0-9.-]+\.readest-plugin$/.test(item.downloadUrl)) throw new Error('Invalid package path');
-    const bytes = readFileSync(join(directory, item.downloadUrl));
+    let archivePath=item.downloadUrl;
+    if(!/^plugins\/[a-z0-9.-]+\.readest-plugin$/.test(archivePath)){
+      const url=new URL(item.downloadUrl);
+      const name=url.pathname.split('/').at(-1);
+      if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||!/^[a-z0-9.-]+\.readest-plugin$/.test(name))throw new Error('Invalid package path');
+      archivePath='plugins/'+name;
+    }
+    const bytes = readFileSync(join(directory, archivePath));
     if (digest(bytes) !== item.sha256 || bytes.length !== item.size) throw new Error('Package digest mismatch');
     const reader = new ZipReader(new Uint8ArrayReader(bytes));
     try {
@@ -32,7 +38,8 @@ export async function verifyRepository(directory, expectedSigner) {
       const key = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100','hex'),publicKey]), type:'spki',format:'der' });
       if (!verify(null,Buffer.from(JSON.stringify({format:1,files:inventory})),key,Buffer.from(signature.signature,'base64'))) throw new Error('Invalid signature');
       const manifest = JSON.parse(files.get('manifest.json'));
-      if (manifest.id !== item.id || manifest.pluginVersion !== item.version || manifest.protocolVersion !== 2 || manifest.pluginApi.min !== 2 || manifest.pluginApi.max !== 2 || !files.has(manifest.entry)) throw new Error('Manifest identity mismatch');
+      const api=manifest.pluginApi;
+      if (manifest.id !== item.id || manifest.pluginVersion !== item.version || manifest.protocolVersion !== 2 || !api || !Number.isInteger(api.min) || !Number.isInteger(api.max) || api.min>api.max || api.min>3 || api.max<2 || JSON.stringify(api)!==JSON.stringify(item.pluginApi) || !files.has(manifest.entry)) throw new Error('Manifest identity mismatch');
     } finally { await reader.close(); }
   }
   return index;

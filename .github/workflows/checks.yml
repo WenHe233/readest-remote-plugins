@@ -1,7 +1,7 @@
 name: Plugin checks
 on:
   push:
-    branches: [main]
+    branches: [main, exp/network-sources]
   pull_request:
 permissions:
   contents: read
@@ -19,6 +19,7 @@ jobs:
       - run: |
           npm run sdk:prepare
           pnpm install --frozen-lockfile
+          pnpm fixtures:prepare
           pnpm check
           pnpm test
           node scripts/sign-plugins.mjs --test

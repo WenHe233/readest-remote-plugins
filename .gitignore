@@ -22,3 +22,6 @@ release/
 *.sqlite*
 test-credentials.json
 coverage/
+# Fetch these pinned test inputs locally; their upstream repositories have no confirmed license.
+tests/fixtures/venera/
+tests/fixtures/legado/shuhaige.json

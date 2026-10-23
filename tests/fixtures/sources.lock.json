@@ -1,0 +1,37 @@
+[
+  {
+    "file": "venera/manga_dex.js",
+    "url": "https://raw.githubusercontent.com/venera-app/venera-configs/a04e05591f7832f7166d6660546613c114d6738a/manga_dex.js",
+    "sha256": "c8beb84262da8fa3922ff0392fc2f79f03ee36ae08933d10571172ef6c8ce21d"
+  },
+  {
+    "file": "venera/comick.js",
+    "url": "https://raw.githubusercontent.com/venera-app/venera-configs/a04e05591f7832f7166d6660546613c114d6738a/comick.js",
+    "sha256": "8e775b2381419d6cc8f912abb11158ee8ab5fb216b68441c6ea18e7bab135562"
+  },
+  {
+    "file": "venera/baozi.js",
+    "url": "https://raw.githubusercontent.com/venera-app/venera-configs/a04e05591f7832f7166d6660546613c114d6738a/baozi.js",
+    "sha256": "6ccb52e7734e54c6dfcfcb9729adb46409f1e5c9d83bbda54313b066013e4255"
+  },
+  {
+    "file": "venera/komiic.js",
+    "url": "https://raw.githubusercontent.com/venera-app/venera-configs/a04e05591f7832f7166d6660546613c114d6738a/komiic.js",
+    "sha256": "a467325b6be833afc676099e66563a9af849641ef9e548d1f2304cd2d883d1e8"
+  },
+  {
+    "file": "venera/comic_walker.js",
+    "url": "https://raw.githubusercontent.com/venera-app/venera-configs/a04e05591f7832f7166d6660546613c114d6738a/comic_walker.js",
+    "sha256": "d039289f0aacda36990f090f93779bf54116e4d0e20c626c7ac29c73ec1e3513"
+  },
+  {
+    "file": "legado/xiu2.json",
+    "url": "https://raw.githubusercontent.com/XIU2/Yuedu/426b24f59aa763ee0f2d9cc094612d2ef42c8293/shuyuan",
+    "sha256": "00644eda44f0fcabcfc015a024480376638d5e7a381a2010aeedfca5aa797845"
+  },
+  {
+    "file": "legado/shuhaige.json",
+    "url": "https://raw.githubusercontent.com/speauty/legado.sources/ff3e1928f575fb235a50cc54f286fbc1d1babe90/sources/active/shuhaige.json",
+    "sha256": "9244c9d02311f85a06974d096f2b26b9c8c74db4593c5fb8d298ea4dcb37673f"
+  }
+]

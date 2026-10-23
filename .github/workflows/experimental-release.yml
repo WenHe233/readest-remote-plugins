@@ -47,8 +47,15 @@ jobs:
         env:
           READEST_COMPATIBILITY_LIVE: '1'
         run: |
-          pnpm test -- tests/compatibility-live.test.ts -t 'manga_dex|komiic|comick|酷我小说|阅友小说|书海阁'
+          pnpm exec vitest run tests/compatibility-live.test.ts -t 'manga_dex|komiic|comick|酷我小说|阅友小说|书海阁'
           node scripts/write-compatibility-report.mjs
+      - name: Retain live diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: live-compatibility-${{ env.SOURCE_SHA }}
+          path: .artifacts/compatibility-live.json
+          if-no-files-found: ignore
       - name: Sign experimental providers
         env:
           READEST_PLUGIN_SIGNING_KEY_PEM: ${{ secrets.READEST_PLUGIN_SIGNING_KEY_PEM }}

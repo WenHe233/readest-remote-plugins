@@ -128,7 +128,7 @@ describe.runIf(enabled)(
                 signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
               }).catch((error) => {
                 throw new Error(
-                  `${request.method ?? 'GET'} ${new URL(request.url).origin + new URL(request.url).pathname}: ${String(error)}`,
+                  `${request.method ?? 'GET'} ${new URL(request.url).origin + new URL(request.url).pathname}: ${String(error)} (${error.cause?.code ?? 'unknown transport error'})`,
                 );
               });
               const bytes = new Uint8Array(await response.arrayBuffer());

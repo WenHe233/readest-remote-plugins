@@ -1,6 +1,6 @@
 {
   "name": "readest-remote-plugins",
-  "version": "0.2.0-x1",
+  "version": "0.3.0-x1",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0",

@@ -1,3 +1,4 @@
+import { anySignal, pluginErrorDiagnosticSchema } from '@readest/plugin-sdk';
 import variant from '@jitl/quickjs-wasmfile-release-asyncify';
 import {
   newQuickJSAsyncWASMModuleFromVariant,
@@ -6,11 +7,7 @@ import {
   type QuickJSHandle,
   type QuickJSDeferredPromise,
 } from 'quickjs-emscripten-core';
-import {
-  CompatibilityError,
-  type EngineHost,
-  type EngineRequest,
-} from './types';
+import { CompatibilityError, type EngineHost, type EngineRequest } from './types';
 
 /** Each instance owns its WASM module: Asyncify stacks must never be shared across instances. */
 export class Sandbox {
@@ -65,43 +62,32 @@ export class Sandbox {
     const request = async (input: string) => {
       sandbox.check();
       const parsed = JSON.parse(input) as EngineRequest;
-      if (!parsed || typeof parsed.url !== 'string')
-        throw new Error('Invalid network request');
+      if (!parsed || typeof parsed.url !== 'string') throw new Error('Invalid network request');
       const url = new URL(parsed.url);
-      if (!['https:', 'http:'].includes(url.protocol))
-        throw new Error('Unsupported URL protocol');
-      const signal = AbortSignal.any([host.signal, sandbox.controller.signal]);
+      if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Unsupported URL protocol');
       if (sandbox.pending.size >= 8)
-        throw new CompatibilityError(
-          'LIMIT_EXCEEDED',
-          'Network concurrency exceeds 8',
-        );
-      const response = await new Promise<
-        Awaited<ReturnType<EngineHost['request']>>
-      >((resolve, reject) => {
-        const abort = () =>
-          reject(
-            new CompatibilityError('CANCELED', 'Network request canceled'),
-          );
-        signal.addEventListener('abort', abort, { once: true });
-        if (signal.aborted) {
-          abort();
-          return;
-        }
-        host
-          .request(parsed, signal)
-          .then(resolve, reject)
-          .finally(() => signal.removeEventListener('abort', abort));
-      });
+        throw new CompatibilityError('LIMIT_EXCEEDED', 'Network concurrency exceeds 8');
+      const combined = anySignal(host.signal, sandbox.controller.signal);
+      const signal = combined.signal;
+      let abort=()=>{};
+      const response = await new Promise<Awaited<ReturnType<EngineHost['request']>>>(
+        (resolve, reject) => {
+          abort = () =>
+            reject(new CompatibilityError('CANCELED', 'Network request canceled'));
+          signal.addEventListener('abort', abort, { once: true });
+          if (signal.aborted) {
+            abort();
+            return;
+          }
+          Promise.resolve().then(()=>host.request(parsed, signal)).then(resolve,reject);
+        },
+      ).finally(()=>{signal.removeEventListener('abort',abort);combined.cleanup();});
       sandbox.check();
       if (
         response.body.length > 16 * 1024 * 1024 ||
         (response.bytes?.length ?? 0) > 16 * 1024 * 1024
       )
-        throw new CompatibilityError(
-          'LIMIT_EXCEEDED',
-          'Response exceeds 16 MiB',
-        );
+        throw new CompatibilityError('LIMIT_EXCEEDED', 'Response exceeds 16 MiB');
       return JSON.stringify({
         ...response,
         bytes: parsed.responseType === 'bytes' ? response.bytes : undefined,
@@ -152,10 +138,7 @@ export class Sandbox {
           sandbox.check();
           return vm.newString(
             JSON.stringify(
-              options.service?.(
-                vm.getString(name),
-                JSON.parse(vm.getString(input)),
-              ) ?? null,
+              options.service?.(vm.getString(name), JSON.parse(vm.getString(input))) ?? null,
             ),
           );
         } catch (error) {
@@ -166,13 +149,19 @@ export class Sandbox {
     return sandbox;
   }
   private errorHandle(error: unknown): QuickJSHandle {
-    const result = this.vm.newError(
-      error instanceof Error ? error.message : String(error),
-    );
+    const result = this.vm.newError(error instanceof Error ? error.message : String(error));
     const code = (error as { code?: unknown })?.code;
     if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,127}$/.test(code)) {
       const value = this.vm.newString(code);
       this.vm.setProp(result, 'code', value);
+      value.dispose();
+    }
+    const diagnostic = pluginErrorDiagnosticSchema.safeParse(
+      (error as { diagnostic?: unknown })?.diagnostic,
+    );
+    if (diagnostic.success && Object.keys(diagnostic.data).length) {
+      const value = this.vm.newString(JSON.stringify(diagnostic.data));
+      this.vm.setProp(result, 'diagnosticJson', value);
       value.dispose();
     }
     return result;
@@ -180,22 +169,21 @@ export class Sandbox {
   private scriptError(error: any): CompatibilityError {
     const message = error?.message ?? String(error);
     const code =
-      typeof error?.code === 'string' &&
-      /^[A-Z][A-Z0-9_]{0,127}$/.test(error.code)
+      typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{0,127}$/.test(error.code)
         ? error.code
         : /^UNSUPPORTED_CAPABILITY:/.test(message)
           ? 'UNSUPPORTED_CAPABILITY'
           : /interrupted|out of memory/i.test(message)
             ? 'LIMIT_EXCEEDED'
             : 'SCRIPT_ERROR';
-    return new CompatibilityError(code, message);
+    let diagnostic;
+    try {
+      diagnostic = pluginErrorDiagnosticSchema.parse(JSON.parse(error?.diagnosticJson ?? 'null'));
+    } catch {}
+    return new CompatibilityError(code, message, diagnostic);
   }
   private check() {
-    if (
-      this.closed ||
-      this.host.signal.aborted ||
-      this.controller.signal.aborted
-    )
+    if (this.closed || this.host.signal.aborted || this.controller.signal.aborted)
       throw new CompatibilityError('CANCELED', 'Script execution canceled');
     if (Date.now() > this.deadline)
       throw new CompatibilityError('LIMIT_EXCEEDED', 'Script timeout');
@@ -241,22 +229,15 @@ export class Sandbox {
             throw new Error(error.message);
           }
         } else if (this.pending.size) {
-          await Promise.race([
-            ...this.pending,
-            new Promise<void>((_, reject) => {
-              const signal = AbortSignal.any([
-                this.host.signal,
-                this.controller.signal,
-              ]);
-              if (signal.aborted) reject(new Error('Script canceled'));
-              else
-                signal.addEventListener(
-                  'abort',
-                  () => reject(new Error('Script canceled')),
-                  { once: true },
-                );
-            }),
-          ]);
+          const combined=anySignal(this.host.signal,this.controller.signal);
+          let abort=()=>{};
+          try {
+            await Promise.race([...this.pending,new Promise<void>((_,reject)=>{
+              abort=()=>reject(new CompatibilityError('CANCELED','Script canceled'));
+              if(combined.signal.aborted)abort();
+              else combined.signal.addEventListener('abort',abort,{once:true});
+            })]);
+          } finally {combined.signal.removeEventListener('abort',abort);combined.cleanup();}
         } else
           throw new CompatibilityError(
             'SCRIPT_ERROR',

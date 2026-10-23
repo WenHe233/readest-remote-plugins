@@ -39,7 +39,7 @@ export async function verifyRepository(directory, expectedSigner) {
       if (!verify(null,Buffer.from(JSON.stringify({format:1,files:inventory})),key,Buffer.from(signature.signature,'base64'))) throw new Error('Invalid signature');
       const manifest = JSON.parse(files.get('manifest.json'));
       const api=manifest.pluginApi;
-      if (manifest.id !== item.id || manifest.pluginVersion !== item.version || manifest.protocolVersion !== 2 || !api || !Number.isInteger(api.min) || !Number.isInteger(api.max) || api.min>api.max || api.min>3 || api.max<2 || JSON.stringify(api)!==JSON.stringify(item.pluginApi) || !files.has(manifest.entry)) throw new Error('Manifest identity mismatch');
+      if (manifest.id !== item.id || manifest.pluginVersion !== item.version || manifest.protocolVersion !== 2 || !api || !Number.isInteger(api.min) || !Number.isInteger(api.max) || api.min>api.max || api.min>4 || api.max<2 || JSON.stringify(api)!==JSON.stringify(item.pluginApi) || !files.has(manifest.entry)) throw new Error('Manifest identity mismatch');
     } finally { await reader.close(); }
   }
   return index;

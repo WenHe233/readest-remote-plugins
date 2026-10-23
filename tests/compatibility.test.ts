@@ -28,6 +28,19 @@ function host(pages: Record<string, string> = {}): EngineHost {
 }
 
 describe('isolated compatibility VM', () => {
+  it('waits for delayed async HTTP without AbortSignal.any and cancels suspended requests', async () => {
+    const original=Object.getOwnPropertyDescriptor(AbortSignal,'any');
+    Object.defineProperty(AbortSignal,'any',{value:undefined,configurable:true});
+    const h=host();const controller=new AbortController();h.signal=controller.signal;
+    h.request=async(request)=>{await new Promise(resolve=>setTimeout(resolve,25));return {status:200,url:request.url,headers:{},body:'delayed'};};
+    const vm=await Sandbox.create(h);
+    try {
+      expect(await vm.run('__requestAsync(JSON.stringify({url:"https://test.example/slow"})).then(JSON.parse).then(result=>result.body)')).toBe('delayed');
+      const pending=vm.run('__requestAsync(JSON.stringify({url:"https://test.example/slow"}))');
+      setTimeout(()=>controller.abort(),5);
+      await expect(pending).rejects.toThrow(/cancel/i);
+    } finally {vm.dispose();if(original)Object.defineProperty(AbortSignal,'any',original);}
+  });
   it('preserves host permission errors across both request bridges', async () => {
     const h = host();
     h.request = async () => {

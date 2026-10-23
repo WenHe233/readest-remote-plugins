@@ -1,8 +1,6 @@
+import { sourceDescriptionSchema, type SourceDescription } from '@readest/plugin-sdk';
 import { Sandbox } from '../../../packages/compatibility/src/sandbox';
-import {
-  COMMON_BOOTSTRAP,
-  createServices,
-} from '../../../packages/compatibility/src/services';
+import { COMMON_BOOTSTRAP, createServices } from '../../../packages/compatibility/src/services';
 import {
   CompatibilityError,
   type EngineHost,
@@ -24,14 +22,9 @@ export interface VeneraDefinition {
 export function inspectVenera(content: string): VeneraDefinition {
   if (content.length > 4 * 1024 * 1024)
     throw new CompatibilityError('INVALID_SOURCE', 'Source exceeds 4 MiB');
-  const match = /class\s+([A-Za-z_$][\w$]*)\s+extends\s+ComicSource\b/.exec(
-    content,
-  );
+  const match = /class\s+([A-Za-z_$][\w$]*)\s+extends\s+ComicSource\b/.exec(content);
   if (!match)
-    throw new CompatibilityError(
-      'INVALID_SOURCE',
-      'Expected a class extending ComicSource',
-    );
+    throw new CompatibilityError('INVALID_SOURCE', 'Expected a class extending ComicSource');
   const field = (name: string) =>
     new RegExp(`\\b${name}\\s*=\\s*['"]([^'"\\r\\n]+)['"]`).exec(content)?.[1];
   return {
@@ -46,19 +39,13 @@ export function inspectVenera(content: string): VeneraDefinition {
 export function inspectVeneraList(
   content: string,
   baseUrl?: string,
-): Array<{ name: string; url: string }> {
+): Array<{ name: string; url: string; version?: string; description?: string }> {
   const list = JSON.parse(content);
   if (!Array.isArray(list))
-    throw new CompatibilityError(
-      'INVALID_SOURCE',
-      'Expected a Venera source list',
-    );
+    throw new CompatibilityError('INVALID_SOURCE', 'Expected a Venera source list');
   return list.map((item) => {
     const target = item.url ?? item.filename ?? item.fileName;
-    if (
-      typeof target !== 'string' ||
-      (!baseUrl && !/^https?:\/\//i.test(target))
-    )
+    if (typeof target !== 'string' || (!baseUrl && !/^https?:\/\//i.test(target)))
       throw new CompatibilityError(
         'INVALID_SOURCE',
         'Relative source list entries need the original list URL',
@@ -66,7 +53,12 @@ export function inspectVeneraList(
     const url = new URL(target, baseUrl);
     if (!['https:', 'http:'].includes(url.protocol))
       throw new CompatibilityError('INVALID_SOURCE', 'Invalid source URL');
-    return { name: String(item.name ?? ''), url: url.href };
+    return {
+      name: String(item.name ?? ''),
+      url: url.href,
+      ...(typeof item.version === 'string' ? { version: item.version } : {}),
+      ...(typeof item.description === 'string' ? { description: item.description } : {}),
+    };
   });
 }
 
@@ -113,11 +105,7 @@ export class VeneraEngine {
       if (!this.vm) {
         this.state = await this.host.readState();
         this.vm = await Sandbox.create(this.host, {
-          service: createServices(
-            this.state,
-            this.host.settings,
-            this.host.service,
-          ),
+          service: createServices(this.state, this.host.settings, this.host.service),
         });
         await this.vm.run(
           BOOTSTRAP +
@@ -127,27 +115,121 @@ export class VeneraEngine {
         );
         await this.vm.run('Promise.resolve(__source.init?.())');
       }
-      const result = await this.vm.run(
-        `Promise.resolve(${expression}).then(portable)`,
-      );
+      const result = await this.vm.run(`Promise.resolve(${expression}).then(portable)`);
       await this.host.writeState(this.state);
       return result;
     });
     this.tail = next.catch(() => {});
     return next;
   }
-  async search(
-    query: string,
-    cursor?: string,
-  ): Promise<EnginePage<EngineWork>> {
+  async describe(): Promise<SourceDescription> {
+    const denied = () => {
+      throw new CompatibilityError(
+        'PERMISSION_DENIED',
+        'Source metadata cannot access private state or network',
+      );
+    };
+    const vm = await Sandbox.create(
+      { ...this.host, request: async () => denied() },
+      {
+        service: (name) => (name === 'setting' ? null : denied()),
+      },
+    );
+    try {
+      await vm.run(
+        BOOTSTRAP +
+          '\n' +
+          this.definition.content +
+          `\nglobalThis.__source=new ${this.definition.className}();`,
+      );
+      return sourceDescriptionSchema.parse(
+        await vm.run(`portable((()=>{
+        const settings=[],actions=[];
+        const tr=value=>__source.translation?.[APP.locale]?.[value]??String(value??'');
+        for(const [key,item] of Object.entries(__source.settings??{})) {
+          if(item.type==='callback') {actions.push({id:key,label:tr(item.buttonText??item.title)});continue;}
+          const type={input:'text',switch:'boolean',select:'select'}[item.type];
+          if(!type)unsupported('settings.'+item.type);
+          const secret=type==='text'&&/api.?key|password|secret|token/i.test(key);
+          const field={key,label:tr(item.title??key),type:secret?'secret':type};
+          if(type==='text')field.private=true;
+          if(item.default!==undefined)field.default=item.default;
+          if(type==='select')field.options=(item.options??[]).map(option=>({value:option.value,label:tr(option.text??option.value)}));
+          settings.push(field);
+        }
+        let authentication={kind:'none'};
+        if(__source.account?.login)authentication={kind:'form',fields:[{key:'account',label:'Account',type:'text',required:true},{key:'password',label:'Password',type:'secret',required:true}]};
+        else if(__source.account?.loginWithCookies?.validate)authentication={kind:'form',fields:__source.account.loginWithCookies.fields.map(key=>({key,label:key,type:'secret',required:true}))};
+        else if(__source.account?.loginWithWebview)authentication={kind:'unsupported',reason:'account.loginWithWebview'};
+        return {settings,actions,authentication};
+      })())`),
+      );
+    } finally {
+      vm.dispose();
+    }
+  }
+  async validateSettings(
+    values: Record<string, unknown>,
+  ): Promise<{ fieldErrors: Record<string, string> }> {
+    const denied = () => {
+      throw new CompatibilityError(
+        'PERMISSION_DENIED',
+        'Settings validation cannot use host services',
+      );
+    };
+    const vm = await Sandbox.create(
+      { ...this.host, request: async () => denied() },
+      { timeoutMs: 1000, service: (name) => (name === 'setting' ? null : denied()) },
+    );
+    try {
+      await vm.run(
+        BOOTSTRAP +
+          '\n' +
+          this.definition.content +
+          `\nglobalThis.__source=new ${this.definition.className}();`,
+      );
+      return (await vm.run(
+        `(()=>{const values=${JSON.stringify(values)},fieldErrors={};for(const [key,setting] of Object.entries(__source.settings??{})){if(setting.type!=='input'||!setting.validator||!Object.prototype.hasOwnProperty.call(values,key))continue;if(typeof setting.validator!=='string')unsupported('settings.validator');try{if(!new RegExp(setting.validator).test(String(values[key]??setting.default??'')))fieldErrors[key]='Invalid setting value';}catch{fieldErrors[key]='Invalid setting validator';}}return {fieldErrors};})()`,
+      )) as { fieldErrors: Record<string, string> };
+    } finally {
+      vm.dispose();
+    }
+  }
+  async runSettingAction(actionId: string): Promise<void> {
+    const description = await this.describe();
+    if (!description.actions.some((action) => action.id === actionId))
+      throw new CompatibilityError('INVALID_PAYLOAD', 'Unknown setting action');
+    await this.call(
+      `(async()=>{await __source.settings[${JSON.stringify(actionId)}].callback();return true;})()`,
+    );
+  }
+  private async coverWork(value: unknown): Promise<EngineWork> {
+    const work = this.work(value);
+    if (work.cover) {
+      const config = (await this.call(
+        `Promise.resolve(__source.comic?.onThumbnailLoad?.(${JSON.stringify(work.cover.url)})??{})`,
+      )) as Record<string, unknown>;
+      if (config.modifyImage || config.onResponse)
+        throw new CompatibilityError(
+          'UNSUPPORTED_CAPABILITY',
+          'Thumbnail response transformation is unavailable',
+        );
+      work.cover = {
+        ...work.cover,
+        url: typeof config.url === 'string' ? config.url : work.cover.url,
+        headers: config.headers as Record<string, string> | undefined,
+      };
+    }
+    return work;
+  }
+  async search(query: string, cursor?: string): Promise<EnginePage<EngineWork>> {
     const page = Number(cursor ?? 1);
     const result = await this.call(
       `(__source.search?.load ? __source.search.load(${JSON.stringify(query)},searchOptions(),${page}) : __source.search?.loadNext ? __source.search.loadNext(${JSON.stringify(query)},searchOptions(),${JSON.stringify(cursor ?? null)}) : unsupported('search'))`,
     );
     return {
-      items: (result.comics ?? []).map((v: any) => this.work(v)),
-      nextCursor:
-        result.next ?? (result.maxPage > page ? String(page + 1) : undefined),
+      items: await Promise.all((result.comics ?? []).map((v: unknown) => this.coverWork(v))),
+      nextCursor: result.next ?? (result.maxPage > page ? String(page + 1) : undefined),
     };
   }
   async explore(cursor?: string): Promise<EnginePage<EngineWork>> {
@@ -159,24 +241,21 @@ export class VeneraEngine {
       result.comics ??
       (Array.isArray(result)
         ? result.flatMap((part: any) => part.comics ?? [])
-        : (result.data?.flatMap(
-            (part: any) => part.comics ?? (Array.isArray(part) ? part : []),
-          ) ?? []));
+        : (result.data?.flatMap((part: any) => part.comics ?? (Array.isArray(part) ? part : [])) ??
+          []));
     return {
-      items: comics.map((v: any) => this.work(v)),
+      items: await Promise.all(comics.map((v: unknown) => this.coverWork(v))),
       nextCursor: result.maxPage > page ? String(page + 1) : undefined,
     };
   }
   async getWork(id: string): Promise<EngineWork> {
-    return this.work({
+    return this.coverWork({
       ...(await this.call(`__source.comic.loadInfo(${JSON.stringify(id)})`)),
       id,
     });
   }
   async getChapters(id: string): Promise<EnginePage<EngineChapter>> {
-    const result = await this.call(
-      `__source.comic.loadInfo(${JSON.stringify(id)})`,
-    );
+    const result = await this.call(`__source.comic.loadInfo(${JSON.stringify(id)})`);
     const chapters = result.chapters ?? { '0': 'Read' };
     const items: EngineChapter[] = [];
     for (const [key, value] of Object.entries(chapters)) {
@@ -187,10 +266,7 @@ export class VeneraEngine {
     }
     return { items };
   }
-  async resolveChapter(
-    workId: string,
-    chapterId: string,
-  ): Promise<EngineContent> {
+  async resolveChapter(workId: string, chapterId: string): Promise<EngineContent> {
     const pages = await this.call(
       `(async()=>{const result=await __source.comic.loadEp(${JSON.stringify(workId)},${JSON.stringify(chapterId)});const pages=Array.isArray(result)?result:result.images;if(!Array.isArray(pages))throw new Error('loadEp returned no images');return await Promise.all(pages.map(async(url,index)=>{const config=await (__source.comic.onImageLoad?.(url,${JSON.stringify(workId)},${JSON.stringify(chapterId)})??{});if(config.onResponse||config.modifyImage)unsupported('ImageLoadingConfig.onResponse/modifyImage');return {id:${JSON.stringify(chapterId)}+':'+index,url:config.url||url,headers:config.headers,method:config.method,body:encodeBody(config.data)};}));})()`,
     );
@@ -209,16 +285,17 @@ export class VeneraEngine {
       `(async()=>{const input=${JSON.stringify(input)};let result;if(__source.account?.login)result=await __source.account.login(String(input.account??''),String(input.password??''));else if(__source.account?.loginWithCookies?.validate)result=await __source.account.loginWithCookies.validate(__source.account.loginWithCookies.fields.map(key=>String(input[key]??'')));else unsupported('account.login');if(result===false)return false;__source.saveData('__logged',true);return true;})()`,
     );
   }
-  private work(value: any): EngineWork {
+  private work(input: unknown): EngineWork {
+    const value = input as Record<string, unknown>;
     return {
       id: String(value.id),
       title: String(value.title ?? value.id),
-      author: value.subtitle ?? value.subTitle,
-      description: value.description,
+      author: String(value.subtitle ?? value.subTitle ?? ''),
+      description: typeof value.description === 'string' ? value.description : undefined,
       cover: value.cover
-        ? { id: String(value.id) + ':cover', url: value.cover }
+        ? { id: String(value.id) + ':cover', url: String(value.cover) }
         : undefined,
-      url: value.url,
+      url: typeof value.url === 'string' ? value.url : undefined,
       kind: 'comic',
     };
   }

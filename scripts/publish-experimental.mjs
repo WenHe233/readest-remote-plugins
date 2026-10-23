@@ -119,7 +119,7 @@ async function main() {
     if (!response.ok) throw new Error(`Upload ${file.name}: HTTP ${response.status}`);
   };
 
-  const notes = 'Experimental API 3 Legado and Venera compatibility plugins.\n\nSDK: ' + sdk.version + ' (' + sdk.revision + ')\n\nSee compatibility-report.json for fixture hashes, live checks and limitations. Stable Kavita/Komga packages are unchanged.';
+  const notes = 'Experimental API 4 Legado and Venera compatibility plugins.\n\nSDK: ' + sdk.version + ' (' + sdk.revision + ')\n\nSee compatibility-report.json for fixture hashes, live checks and limitations. Stable Kavita/Komga packages are unchanged.';
   console.log('Published ' + await publishExperimental({ identity, files, notes, api, upload }));
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) await main();

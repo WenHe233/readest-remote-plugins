@@ -78,7 +78,7 @@ SOFTWARE.
 
 ========================================================================
 
-@readest/plugin-sdk 0.2.0-x1
+@readest/plugin-sdk 0.3.0-x1
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 

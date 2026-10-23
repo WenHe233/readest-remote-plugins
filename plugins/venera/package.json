@@ -1,10 +1,10 @@
 {
   "name": "@readest/plugin-venera",
-  "version": "0.2.0-x1",
+  "version": "0.3.0-x1",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@readest/plugin-sdk": "0.2.0-x1"
+    "@readest/plugin-sdk": "0.3.0-x1"
   },
   "readestBuildResources": [
     {

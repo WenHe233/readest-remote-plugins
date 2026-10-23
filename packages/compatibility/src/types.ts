@@ -1,3 +1,4 @@
+import type { PluginErrorDiagnostic } from '@readest/plugin-sdk';
 export interface EngineRequest {
   url: string;
   method?: string;
@@ -58,14 +59,12 @@ export class CompatibilityError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    readonly diagnostic?: PluginErrorDiagnostic,
   ) {
     super(message);
     this.name = 'CompatibilityError';
   }
 }
 export const unsupported = (api: string): never => {
-  throw new CompatibilityError(
-    'UNSUPPORTED_CAPABILITY',
-    `Unsupported compatibility API: ${api}`,
-  );
+  throw new CompatibilityError('UNSUPPORTED_CAPABILITY', `Unsupported compatibility API: ${api}`);
 };

@@ -1,12 +1,7 @@
+import type { SourceDescription } from '@readest/plugin-sdk';
 import { Sandbox } from '../../../packages/compatibility/src/sandbox';
-import {
-  COMMON_BOOTSTRAP,
-  createServices,
-} from '../../../packages/compatibility/src/services';
-import {
-  parseRule,
-  splitOutside,
-} from '../../../packages/compatibility/src/rules';
+import { COMMON_BOOTSTRAP, createServices } from '../../../packages/compatibility/src/services';
+import { parseRule, splitOutside } from '../../../packages/compatibility/src/rules';
 import {
   CompatibilityError,
   unsupported,
@@ -33,10 +28,7 @@ export function inspectLegado(content: string): LegadoDefinition[] {
   try {
     parsed = JSON.parse(content.replace(/^\uFEFF/, ''));
   } catch {
-    throw new CompatibilityError(
-      'INVALID_SOURCE',
-      'Legado source must be JSON',
-    );
+    throw new CompatibilityError('INVALID_SOURCE', 'Legado source must be JSON');
   }
   const items = Array.isArray(parsed) ? parsed : [parsed];
   return items.map((item) => {
@@ -46,10 +38,7 @@ export function inspectLegado(content: string): LegadoDefinition[] {
       typeof item.bookSourceUrl !== 'string' ||
       typeof item.bookSourceName !== 'string'
     )
-      throw new CompatibilityError(
-        'INVALID_SOURCE',
-        'Missing bookSourceName/bookSourceUrl',
-      );
+      throw new CompatibilityError('INVALID_SOURCE', 'Missing bookSourceName/bookSourceUrl');
     return {
       id: item.bookSourceUrl,
       name: item.bookSourceName,
@@ -99,8 +88,7 @@ export class LegadoEngine {
           `\nbaseUrl=${JSON.stringify(source.bookSourceUrl)};book.origin=baseUrl;Object.assign(source,${JSON.stringify(source)});`,
       );
       if (source.jsLib) {
-        if (String(source.jsLib).trim().startsWith('{'))
-          unsupported('remote jsLib dependency');
+        if (String(source.jsLib).trim().startsWith('{')) unsupported('remote jsLib dependency');
         await vm.run(source.jsLib);
       }
       return await fn(vm);
@@ -135,9 +123,7 @@ export class LegadoEngine {
       const assignments = JSON.parse(put[1]);
       for (const [key, value] of Object.entries(assignments)) {
         const parsed = await this.rule(vm, input, value, base);
-        await vm.run(
-          `java.put(${JSON.stringify(key)},${JSON.stringify(parsed.join('\n'))})`,
-        );
+        await vm.run(`java.put(${JSON.stringify(key)},${JSON.stringify(parsed.join('\n'))})`);
       }
       text = text.slice(put[0].length);
     }
@@ -151,23 +137,13 @@ export class LegadoEngine {
     const index = jsIndex >= 0 ? jsIndex : tagIndex;
     if (index >= 0) {
       const head = text.slice(0, index);
-      const value = head
-        ? (await this.rule(vm, input, head, base, elements)).join('\n')
-        : input;
+      const value = head ? (await this.rule(vm, input, head, base, elements)).join('\n') : input;
       const end = tagIndex >= 0 ? text.indexOf('</js>', tagIndex) : -1;
       const code =
-        jsIndex >= 0
-          ? text.slice(index + 4)
-          : text.slice(index + 4, end < 0 ? undefined : end);
+        jsIndex >= 0 ? text.slice(index + 4) : text.slice(index + 4, end < 0 ? undefined : end);
       const result = await this.js(vm, code, value, base, { __content: input });
       if (end >= 0 && text.slice(end + 5).trim())
-        return this.rule(
-          vm,
-          String(result ?? ''),
-          text.slice(end + 5),
-          base,
-          elements,
-        );
+        return this.rule(vm, String(result ?? ''), text.slice(end + 5), base, elements);
       return (Array.isArray(result) ? result : [result])
         .filter((x) => x != null)
         .map((x) => (typeof x === 'string' ? x : JSON.stringify(x)));
@@ -192,18 +168,8 @@ export class LegadoEngine {
     let value = template;
     if (value.startsWith('<js>')) {
       const end = value.indexOf('</js>');
-      if (end < 0)
-        throw new CompatibilityError(
-          'INVALID_SOURCE',
-          'Unclosed URL JavaScript block',
-        );
-      const result = await this.js(
-        vm,
-        value.slice(4, end),
-        '',
-        base,
-        variables,
-      );
+      if (end < 0) throw new CompatibilityError('INVALID_SOURCE', 'Unclosed URL JavaScript block');
+      const result = await this.js(vm, value.slice(4, end), '', base, variables);
       value = value.slice(end + 5) || String(result ?? '');
     } else if (value.startsWith('@js:'))
       value = String(await this.js(vm, value.slice(4), '', base, variables));
@@ -211,14 +177,10 @@ export class LegadoEngine {
       throw new CompatibilityError('SCRIPT_ERROR', 'URL rule returned no URL');
     await vm.run(`Object.assign(globalThis,${JSON.stringify(variables)})`);
     for (const match of [...value.matchAll(/\{\{([\s\S]*?)\}\}/g)])
-      value = value.replace(
-        match[0],
-        String(await this.js(vm, match[1], '', base, variables)),
-      );
+      value = value.replace(match[0], String(await this.js(vm, match[1], '', base, variables)));
     const split = value.search(/,\s*\{/);
     const path = split < 0 ? value : value.slice(0, split);
-    const options =
-      split < 0 ? {} : await vm.run('(' + value.slice(split + 1) + ')');
+    const options = split < 0 ? {} : await vm.run('(' + value.slice(split + 1) + ')');
     if (options.webView || options.webJs) unsupported('URL webView/webJs');
     const sourceHeader = this.definition.rules.header;
     let headers = sourceHeader
@@ -243,10 +205,7 @@ export class LegadoEngine {
     return {
       url: new URL(path, base).href,
       method: String(options.method ?? 'GET').toUpperCase(),
-      body:
-        typeof options.body === 'object'
-          ? JSON.stringify(options.body)
-          : options.body,
+      body: typeof options.body === 'object' ? JSON.stringify(options.body) : options.body,
       headers: requestHeaders,
       encoding: options.charset,
     };
@@ -276,11 +235,7 @@ export class LegadoEngine {
   ): Promise<EngineWork> {
     const title = await this.field(vm, input, rules.name, base);
     const path = id ?? (await this.field(vm, input, rules.bookUrl, base));
-    if (!path)
-      throw new CompatibilityError(
-        'INVALID_SOURCE',
-        'Book rule returned no stable URL',
-      );
+    if (!path) throw new CompatibilityError('INVALID_SOURCE', 'Book rule returned no stable URL');
     const url = new URL(path, base).href;
     const cover = await this.field(vm, input, rules.coverUrl, base);
     return {
@@ -289,37 +244,23 @@ export class LegadoEngine {
       title: title || url,
       author: await this.field(vm, input, rules.author, base),
       description: await this.field(vm, input, rules.intro, base),
-      cover: cover
-        ? { id: url + ':cover', url: new URL(cover, base).href }
-        : undefined,
+      cover: cover ? { id: url + ':cover', url: new URL(cover, base).href } : undefined,
       kind: 'novel',
     };
   }
-  async search(
-    query: string,
-    cursor?: string,
-  ): Promise<EnginePage<EngineWork>> {
+  async search(query: string, cursor?: string): Promise<EnginePage<EngineWork>> {
     return this.session(async (vm) => {
       const source = this.definition.rules;
       if (!source.searchUrl) unsupported('search');
       const page = Number(cursor ?? 1);
-      const response = await this.request(
-        vm,
-        source.searchUrl,
-        source.bookSourceUrl,
-        { key: query, page },
-      );
+      const response = await this.request(vm, source.searchUrl, source.bookSourceUrl, {
+        key: query,
+        page,
+      });
       const rules = source.ruleSearch ?? {};
-      const elements = await this.rule(
-        vm,
-        response.text,
-        rules.bookList,
-        response.url,
-        true,
-      );
+      const elements = await this.rule(vm, response.text, rules.bookList, response.url, true);
       const items = [];
-      for (const element of elements)
-        items.push(await this.work(vm, element, rules, response.url));
+      for (const element of elements) items.push(await this.work(vm, element, rules, response.url));
       return { items, nextCursor: items.length ? String(page + 1) : undefined };
     });
   }
@@ -329,33 +270,21 @@ export class LegadoEngine {
       if (!source.exploreUrl) unsupported('explore');
       let target = String(source.exploreUrl);
       if (target.startsWith('[')) target = JSON.parse(target)[0].url;
-      else if (target.includes('::'))
-        target = target.split(/&&|\n/)[0].split('::')[1];
+      else if (target.includes('::')) target = target.split(/&&|\n/)[0].split('::')[1];
       const page = Number(cursor ?? 1);
       const response = await this.request(vm, target, source.bookSourceUrl, {
         page,
       });
       const rules = source.ruleExplore ?? source.ruleSearch ?? {};
-      const elements = await this.rule(
-        vm,
-        response.text,
-        rules.bookList,
-        response.url,
-        true,
-      );
+      const elements = await this.rule(vm, response.text, rules.bookList, response.url, true);
       const items = [];
-      for (const element of elements)
-        items.push(await this.work(vm, element, rules, response.url));
+      for (const element of elements) items.push(await this.work(vm, element, rules, response.url));
       return { items, nextCursor: items.length ? String(page + 1) : undefined };
     });
   }
   async getWork(id: string): Promise<EngineWork> {
     return this.session(async (vm) => {
-      const response = await this.request(
-        vm,
-        id,
-        this.definition.rules.bookSourceUrl,
-      );
+      const response = await this.request(vm, id, this.definition.rules.bookSourceUrl);
       const rules = this.definition.rules.ruleBookInfo ?? {};
       const input = rules.init
         ? await this.field(vm, response.text, rules.init, response.url)
@@ -370,56 +299,27 @@ export class LegadoEngine {
       const init = source.ruleBookInfo?.init
         ? await this.field(vm, info.text, source.ruleBookInfo.init, info.url)
         : info.text;
-      const toc = await this.field(
-        vm,
-        init,
-        source.ruleBookInfo?.tocUrl,
-        info.url,
-      );
+      const toc = await this.field(vm, init, source.ruleBookInfo?.tocUrl, info.url);
       let response = toc ? await this.request(vm, toc, info.url) : info;
       const seen = new Set<string>();
       const chapters = new Map<string, EngineChapter>();
       const rules = source.ruleToc ?? {};
       while (!seen.has(response.url)) {
         if (seen.size >= 1000)
-          throw new CompatibilityError(
-            'LIMIT_EXCEEDED',
-            'Directory exceeds 1000 pages',
-          );
+          throw new CompatibilityError('LIMIT_EXCEEDED', 'Directory exceeds 1000 pages');
         seen.add(response.url);
-        const elements = await this.rule(
-          vm,
-          response.text,
-          rules.chapterList,
-          response.url,
-          true,
-        );
+        const elements = await this.rule(vm, response.text, rules.chapterList, response.url, true);
         for (const element of elements) {
-          const path = await this.field(
-            vm,
-            element,
-            rules.chapterUrl,
-            response.url,
-          );
+          const path = await this.field(vm, element, rules.chapterUrl, response.url);
           if (!path) throw new Error('Chapter rule returned no URL');
           const url = new URL(path, response.url).href;
           chapters.set(url, {
             id: url,
             url,
-            title: await this.field(
-              vm,
-              element,
-              rules.chapterName,
-              response.url,
-            ),
+            title: await this.field(vm, element, rules.chapterName, response.url),
           });
         }
-        const next = await this.field(
-          vm,
-          response.text,
-          rules.nextTocUrl,
-          response.url,
-        );
+        const next = await this.field(vm, response.text, rules.nextTocUrl, response.url);
         if (!next) break;
         const url = new URL(next, response.url).href;
         if (seen.has(url)) break;
@@ -428,10 +328,7 @@ export class LegadoEngine {
       return { items: [...chapters.values()] };
     });
   }
-  async resolveChapter(
-    workId: string,
-    chapterId: string,
-  ): Promise<EngineContent> {
+  async resolveChapter(workId: string, chapterId: string): Promise<EngineContent> {
     return this.session(async (vm) => {
       await vm.run(
         `book={bookUrl:${JSON.stringify(workId)}};chapter={url:${JSON.stringify(chapterId)}};`,
@@ -442,17 +339,9 @@ export class LegadoEngine {
       const rules = this.definition.rules.ruleContent ?? {};
       while (!seen.has(response.url)) {
         if (seen.size >= 100)
-          throw new CompatibilityError(
-            'LIMIT_EXCEEDED',
-            'Chapter exceeds 100 pages',
-          );
+          throw new CompatibilityError('LIMIT_EXCEEDED', 'Chapter exceeds 100 pages');
         seen.add(response.url);
-        let text = await this.field(
-          vm,
-          response.text,
-          rules.content,
-          response.url,
-        );
+        let text = await this.field(vm, response.text, rules.content, response.url);
         if (rules.replaceRegex)
           text = (
             await this.rule(
@@ -465,12 +354,7 @@ export class LegadoEngine {
             )
           ).join('\n');
         content.push(text);
-        const next = await this.field(
-          vm,
-          response.text,
-          rules.nextContentUrl,
-          response.url,
-        );
+        const next = await this.field(vm, response.text, rules.nextContentUrl, response.url);
         if (!next) break;
         const url = new URL(next, response.url).href;
         if (seen.has(url)) break;
@@ -484,10 +368,7 @@ export class LegadoEngine {
             .map(
               (line) =>
                 '<p>' +
-                line
-                  .replaceAll('&', '&amp;')
-                  .replaceAll('<', '&lt;')
-                  .replaceAll('>', '&gt;') +
+                line.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;') +
                 '</p>',
             )
             .join('\n');
@@ -496,6 +377,24 @@ export class LegadoEngine {
   }
   async resolveResource(resource: EngineResource) {
     return resource;
+  }
+  async describe(): Promise<SourceDescription> {
+    const login = String(this.definition.rules.loginUrl ?? '');
+    return {
+      settings: [],
+      actions: [],
+      authentication: !login
+        ? { kind: 'none' }
+        : /^https?:\/\//.test(login)
+          ? { kind: 'unsupported', reason: 'Legado WebView login' }
+          : {
+              kind: 'form',
+              fields: [
+                { key: 'account', label: 'Account', type: 'text', required: true },
+                { key: 'password', label: 'Password', type: 'secret', required: true },
+              ],
+            },
+    };
   }
   async login(values: Record<string, string>) {
     return this.session(async (vm) => {
@@ -509,17 +408,11 @@ export class LegadoEngine {
     return this.session(async (vm) => {
       const source = this.definition.rules;
       const script = String(source.loginUrl ?? '');
-      if (!script || /^https?:\/\//.test(script))
-        unsupported('Legado WebView login');
+      if (!script || /^https?:\/\//.test(script)) unsupported('Legado WebView login');
       await vm.run(
         `java.put('__login',${JSON.stringify(values)});source.getLoginInfoMap=()=>Object.assign({},java.get('__login'),{get(key){return this[key]}});`,
       );
-      await this.js(
-        vm,
-        script.replace(/^@js:|^<js>|<\/js>$/g, ''),
-        values,
-        source.bookSourceUrl,
-      );
+      await this.js(vm, script.replace(/^@js:|^<js>|<\/js>$/g, ''), values, source.bookSourceUrl);
       const result = await vm.run(`typeof login==='function'?login():true`);
       return result !== false;
     });

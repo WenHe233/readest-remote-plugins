@@ -62,7 +62,7 @@ for(const dir of directories){
   const slug=dir.split(/[\\/]/).at(-1);
   const filename=`${slug}-${manifest.pluginVersion}.readest-plugin`;
   await writeFile(join(output,'plugins',filename),bytes);
-  releases.push({id:manifest.id,name:manifest.name,description:manifest.description,version:manifest.pluginVersion,channel:option('--channel',args.includes('--experimental')?'beta':'stable'),fingerprint:digest(publicBytes),downloadUrl:releaseBase?new URL(filename,releaseBase).href:'plugins/'+filename,size:bytes.length,sha256:digest(bytes),pluginApi:manifest.pluginApi,contributions:Object.keys(manifest.contributions)});
+  releases.push({id:manifest.id,name:manifest.name,description:manifest.description,version:manifest.pluginVersion,channel:option('--channel',args.includes('--experimental')?'beta':'stable'),fingerprint:digest(publicBytes),downloadUrl:releaseBase?new URL(filename,releaseBase).href:'plugins/'+filename,size:bytes.length,sha256:digest(bytes),pluginApi:manifest.pluginApi,contributions:Object.keys(manifest.contributions).filter(name=>['dictionaryFormats','librarySources','contentSources','sourceFormats'].includes(name))});
 }
 await writeFile(join(output,'repo.json'),JSON.stringify({schemaVersion:1,id:'io.github.wenhe233.readest-remote-plugins',name:'Readest Remote plugins',description:'Signed Readest plugins',index:'index.json'},null,2)+'\n');
 await writeFile(join(output,'index.json'),JSON.stringify({schemaVersion:1,plugins:releases},null,2)+'\n');

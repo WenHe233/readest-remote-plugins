@@ -33,5 +33,10 @@
     "file": "legado/shuhaige.json",
     "url": "https://raw.githubusercontent.com/speauty/legado.sources/ff3e1928f575fb235a50cc54f286fbc1d1babe90/sources/active/shuhaige.json",
     "sha256": "9244c9d02311f85a06974d096f2b26b9c8c74db4593c5fb8d298ea4dcb37673f"
+  },
+  {
+    "file": "venera/nhentai.js",
+    "url": "https://raw.githubusercontent.com/venera-app/venera-configs/39b82d92b802ee6cf691cdbba80916a154756335/nhentai.js",
+    "sha256": "0f68757f89d493926cbf4c039c256d34365d0639aaa6996acbcde7c162257982"
   }
 ]

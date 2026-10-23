@@ -7,7 +7,7 @@ const root = resolve(import.meta.dirname, '..');
 const source = JSON.parse(readFileSync(join(root, 'SDK_SOURCE.json'), 'utf8'));
 const localIndex = process.argv.indexOf('--local');
 if (!/^[\w-]+\/[\w.-]+$/.test(source.repository)) throw new Error('Invalid SDK repository');
-if(localIndex<0&&(typeof source.revision!=='string'||!/^[0-9a-f]{40}$/.test(source.revision)))throw new Error('SDK release revision is not pinned. Use --local for development, and pin the actual API 3 SDK commit before CI or publication.');
+if(localIndex<0&&(typeof source.revision!=='string'||!/^[0-9a-f]{40}$/.test(source.revision)))throw new Error('SDK release revision is not pinned. Use --local for development, and pin the actual API 4 SDK commit before CI or publication.');
 let directory;
 if (localIndex >= 0) directory = resolve(process.argv[localIndex + 1]);
 else {
